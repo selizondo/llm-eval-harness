@@ -52,13 +52,30 @@ The model under test is a plain Python callable `(question: str) -> str` — swa
 
 ---
 
-## Setup
+## Quick Start
+
+**Runs locally — LLM judge requires an Anthropic key (or Ollama, see below).**
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-export ANTHROPIC_API_KEY=your_key_here
+# 1. Set up env
+cp ../career/.env.example ../career/.env
+# edit ../career/.env — uncomment ANTHROPIC_API_KEY
+
+# 2. Activate shared venv
+source ~/.venvs/newline/bin/activate
+# or: python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+
+# 3. Quick smoke test (3 cases, uses Claude Haiku as judge)
+python main.py run --cases evals/cases/rag_qa.jsonl --model anthropic_direct --tag "smoke" --limit 3
+
+# 4. Full eval against RAG pipeline (Ollama must be running)
+python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk256"
+
+# 5. Compare two runs
+python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk512" --compare <run_id>
 ```
+
+**No Anthropic key?** Point the judge at Ollama by setting `JUDGE_MODEL=ollama` in `.env` and wiring `judge.py` to call Ollama instead of the Anthropic SDK.
 
 ---
 
