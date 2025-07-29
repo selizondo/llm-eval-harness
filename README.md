@@ -75,6 +75,8 @@ python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk
 python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk512" --compare <run_id>
 ```
 
+Results are persisted in `evals/` and SQLite, so you can reproduce the same comparison later and inspect the baseline run metadata with `python main.py list-runs`.
+
 **No Anthropic key?** Point the judge at Ollama by setting `JUDGE_MODEL=ollama` in `.env` and wiring `judge.py` to call Ollama instead of the Anthropic SDK.
 
 ---

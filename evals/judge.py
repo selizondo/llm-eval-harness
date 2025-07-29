@@ -76,7 +76,10 @@ def judge(
     On judge failure, returns scores of 0 with error in reasoning.
     """
     if client is None:
-        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise EnvironmentError("ANTHROPIC_API_KEY not set. Set it before running the eval harness.")
+        client = anthropic.Anthropic(api_key=api_key)
 
     prompt = JUDGE_PROMPT.format(
         question=question,

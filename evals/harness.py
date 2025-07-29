@@ -15,6 +15,7 @@ import os
 import sqlite3
 import time
 import uuid
+from pathlib import Path
 from typing import Callable
 
 
@@ -56,8 +57,12 @@ def init_db(db_path: str = DB_PATH):
 
 
 def load_cases(jsonl_path: str) -> list[dict]:
+    path = Path(jsonl_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Cases file not found: {jsonl_path}")
+
     cases = []
-    with open(jsonl_path, encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -97,10 +102,15 @@ def run_eval(
     run_id = str(uuid.uuid4())[:8]
     timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
     cases = load_cases(cases_path)
+    if not cases:
+        raise ValueError(f"No cases found in {cases_path}")
     if limit:
         cases = cases[:limit]
 
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise EnvironmentError("ANTHROPIC_API_KEY not set. Set it before running the eval harness.")
+    client = anthropic.Anthropic(api_key=api_key)
 
     conn = sqlite3.connect(db_path)
     conn.execute(

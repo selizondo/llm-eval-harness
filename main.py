@@ -35,7 +35,10 @@ DB_PATH = "./evals.db"
 def make_anthropic_direct(model: str = "claude-haiku-4-5"):
     """Direct Anthropic call — no retrieval. Baseline for comparison."""
     import anthropic
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise EnvironmentError("ANTHROPIC_API_KEY not set. Set it before running the eval harness.")
+    client = anthropic.Anthropic(api_key=api_key)
 
     def fn(question: str) -> str:
         response = client.messages.create(
