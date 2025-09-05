@@ -4,6 +4,20 @@ harness.py — Core eval loop: load cases → run model → judge → store resu
 The model under test is passed as a callable: (question: str) -> str.
 This makes the harness model-agnostic — wire any model, pipeline, or agent.
 
+WHY callable interface instead of a class hierarchy:
+    A function is the simplest composable unit. You can wrap anything
+    (an API call, a RAG pipeline, a local model) in a closure and pass it in.
+    No inheritance, no interface contract to satisfy. This is the same pattern
+    used by scikit-learn's cross-validation (pass any estimator) and pytest
+    fixtures (pass any callable).
+
+WHY SQLite instead of a file-per-run:
+    Eval results need to be queryable: "show me all cases where correctness < 3",
+    "compare run A vs run B on case X", "what's the p95 latency trend over time".
+    SQLite gives us SQL for free with zero infrastructure — no Postgres, no Redis.
+    The schema is in SCHEMA below; every run gets a UUID and every result has a
+    foreign key back to its run. Queryable, reproducible, portable.
+
 Usage (from CLI via main.py):
     python main.py --cases evals/cases/rag_qa.jsonl --model anthropic_direct --tag "haiku_baseline"
     python main.py --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_v1"
@@ -128,6 +142,10 @@ def run_eval(
         golden = case["golden_answer"]
 
         # --- Run model under test ---
+        # WHY try/except instead of letting it fail:
+        #   A model that errors on one case should not abort the entire eval run.
+        #   We capture the error, assign score=0, and continue — so you get a
+        #   complete picture of model reliability (some cases failing is signal).
         model_output = None
         model_error = None
         t0 = time.time()
@@ -139,6 +157,10 @@ def run_eval(
         model_latency_ms = int((time.time() - t0) * 1000)
 
         # --- Judge ---
+        # Only call the judge if the model produced output.
+        # WHY: calling judge(question, golden, "") just wastes an API call and
+        # produces 0s anyway (no output = wrong/empty answer). Skip the call,
+        # assign 0s directly, and record the model error for diagnosis.
         if model_output:
             scores = judge(question, golden, model_output, client=client)
         else:

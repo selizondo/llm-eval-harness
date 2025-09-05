@@ -1,13 +1,39 @@
 """
 metrics.py — Aggregate eval results and compute summary statistics.
+
+Key design choices:
+  - Three-axis scoring (correctness, groundedness, conciseness) instead of a
+    single 1-5 scale. WHY: a RAG system with high correctness but low groundedness
+    is hallucinating plausible-sounding content. Low correctness but high
+    groundedness means the system is overly conservative (just repeating the source).
+    Observing all three axes pinpoints *which kind* of failure is happening.
+
+  - accuracy_at_4: percentage of cases where the average score >= 4.0.
+    WHY 4.0 as threshold: on a 1-5 scale, 4.0 corresponds to "good with minor
+    issues". Below 4 means something is meaningfully wrong. This threshold is
+    deliberately conservative — claim improvement only when things are clearly good.
+
+  - Regression detection fires at a >= 1.0 drop in average score per case.
+    WHY 1.0: one full point on the 1-5 scale is a clearly noticeable quality drop.
+    Smaller thresholds (0.5) would generate too many alerts on judge variance.
 """
 
 import sqlite3
 from dataclasses import dataclass
 
-# Haiku pricing as of 2025 (per million tokens)
+# Haiku pricing as of 2025-05 (per million tokens).
+# Update these when Claude pricing changes — they affect cost tracking.
 HAIKU_INPUT_PRICE_PER_M = 1.00
 HAIKU_OUTPUT_PRICE_PER_M = 5.00
+
+# Cases with average score >= this threshold are counted as "accurate"
+ACCURACY_THRESHOLD = 4.0
+
+# Cases with groundedness < this are counted as hallucinations
+HALLUCINATION_THRESHOLD = 3
+
+# A drop of >= this in average score flags a regression between runs
+REGRESSION_DELTA_THRESHOLD = 1.0
 
 
 @dataclass
@@ -54,10 +80,20 @@ def compute_summary(db_path: str, run_id: str, compare_run_id: str | None = None
     avg_score = lambda key: sum(r[key] for r in rows) / n  # noqa: E731
 
     scores_avg = [(r["correctness"] + r["groundedness"] + r["conciseness"]) / 3 for r in rows]
-    accuracy_at_4 = sum(1 for s in scores_avg if s >= 4.0) / n
-    hallucination_rate = sum(1 for r in rows if r["groundedness"] < 3) / n
+    accuracy_at_4 = sum(1 for s in scores_avg if s >= ACCURACY_THRESHOLD) / n
+    hallucination_rate = sum(1 for r in rows if r["groundedness"] < HALLUCINATION_THRESHOLD) / n
 
     latencies = sorted(r["model_latency_ms"] for r in rows)
+
+    # WHY sorted-index percentile instead of numpy:
+    #   numpy is not a dependency of this harness — keeping it pure stdlib avoids
+    #   environment setup issues. The sorted-index approach is exact for discrete
+    #   latency measurements (integer milliseconds).
+    #
+    # WHY min(..., n-1) for p95:
+    #   int(n * 0.95) can equal n when n is small (e.g., n=20 → int(19.0) = 19,
+    #   which is valid for a 0-indexed list of length 20). The min() guard is a
+    #   belt-and-suspenders safety to prevent IndexError on edge-case small lists.
     p50 = latencies[int(n * 0.50)]
     p95 = latencies[min(int(n * 0.95), n - 1)]
 
@@ -66,7 +102,10 @@ def compute_summary(db_path: str, run_id: str, compare_run_id: str | None = None
     cost = (total_input / 1_000_000 * HAIKU_INPUT_PRICE_PER_M +
             total_output / 1_000_000 * HAIKU_OUTPUT_PRICE_PER_M)
 
-    # Regression detection
+    # Regression detection: compare each case against the same case in a previous run.
+    # WHY per-case instead of aggregate: an aggregate improvement can hide regressions
+    # on specific cases. Tracking per-case lets you identify *which* questions got worse,
+    # which is actionable (you can go look at those specific outputs).
     regressed = []
     if compare_run_id:
         cur.execute("""
@@ -78,7 +117,7 @@ def compute_summary(db_path: str, run_id: str, compare_run_id: str | None = None
         for r in rows:
             curr_avg = (r["correctness"] + r["groundedness"] + r["conciseness"]) / 3.0
             prev_avg = prev.get(r["case_id"])
-            if prev_avg is not None and prev_avg - curr_avg >= 1.0:
+            if prev_avg is not None and prev_avg - curr_avg >= REGRESSION_DELTA_THRESHOLD:
                 regressed.append(r["case_id"])
 
     conn.close()
