@@ -230,3 +230,14 @@ The harness doesn't know what the model is — it receives a `(str) -> str` func
 - **CI integration** — GitHub Actions workflow that runs the harness on every PR and posts a score summary as a comment; block merge if hallucination rate exceeds threshold
 - **Broader case coverage** — add adversarial cases (ambiguous questions, out-of-scope queries, prompt injection attempts) to stress-test groundedness
 - **Cost tracking per model** — extend the schema to track model token usage, not just judge tokens, for true cost-per-query comparison across model variants
+
+---
+
+## Related Projects
+
+| Project | Connection |
+|---|---|
+| [rag-pipeline-app](../rag-pipeline-app) | Primary system under evaluation — the harness runs against the RAG API |
+| [rag-pipeline-from-scratch](../rag-pipeline-from-scratch) | Baseline RAG pipeline; 72% Accuracy@4 is the number this harness established |
+| [llm-drift-monitor](../llm-drift-monitor) | Monitoring counterpart — harness catches regressions between releases; drift monitor catches degradation between releases in production |
+| [finetune-case-study](../finetune-case-study) | Uses the same judge pattern and scoring rubric to compare four approaches |
