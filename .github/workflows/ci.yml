@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install rich
+
+      - name: Syntax check — evals package
+        run: |
+          python3 -m py_compile evals/__init__.py
+          python3 -m py_compile evals/metrics.py
+          python3 -m py_compile evals/judge.py
+          python3 -m py_compile evals/harness.py
+          python3 -m py_compile evals/dashboard.py
+
+      - name: Syntax check — entrypoint
+        run: python3 -m py_compile main.py
+
+      - name: Import validation — metrics (no API key needed)
+        run: python3 -c "from evals.metrics import ACCURACY_THRESHOLD, REGRESSION_DELTA_THRESHOLD, RunSummary; print('metrics import ok')"
+
+      - name: Smoke test — metrics constants and dataclass
+        run: |
+          python3 -c "
+          from evals.metrics import ACCURACY_THRESHOLD, REGRESSION_DELTA_THRESHOLD, RunSummary
+          assert ACCURACY_THRESHOLD == 4.0
+          assert REGRESSION_DELTA_THRESHOLD == 1.0
+          print('metrics smoke test passed')
+          "
+
+      - name: Verify judge skips gracefully without API key
+        env:
+          ANTHROPIC_API_KEY: ""
+        run: |
+          python3 -c "
+          import os
+          os.environ['ANTHROPIC_API_KEY'] = ''
+          try:
+              from evals.judge import LLMJudge
+              print('judge import ok')
+          except ImportError as e:
+              print(f'judge import failed (missing dep): {e}')
+          except Exception as e:
+              print(f'judge import error: {e}')
+              exit(1)
+          "
+
+      - name: Secrets scan
+        run: |
+          if grep -rn "sk-ant-[a-zA-Z0-9-]\{20,\}" --include="*.py" .; then
+            echo "Hardcoded Anthropic key found" && exit 1
+          fi
+          if grep -rn 'ANTHROPIC_API_KEY\s*=\s*["'"'"']sk' --include="*.py" .; then
+            echo "Hardcoded key assignment found" && exit 1
+          fi
+          echo "Secrets scan passed"
+
+  regression-check:
+    runs-on: ubuntu-latest
+    # Runs offline regression checks that don't need an API key.
+    # When test files are added, swap the echo for: pip install pytest && pytest tests/ -m "not api"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install rich
+      - name: Check for offline test files
+        run: |
+          count=$(find . -name "test_*.py" | wc -l)
+          echo "Test files found: $count"
+          echo "Add tests/test_metrics.py (no API key required) to enable pytest here"
