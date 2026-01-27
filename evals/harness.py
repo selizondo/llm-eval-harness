@@ -29,6 +29,7 @@ import os
 import sqlite3
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from pathlib import Path
 from typing import Callable
 
@@ -126,6 +127,8 @@ def run_eval(
         raise EnvironmentError("ANTHROPIC_API_KEY not set. Set it before running the eval harness.")
     client = anthropic.Anthropic(api_key=api_key)
 
+    # SQLite scale note: single-writer, ~10M rows before query performance degrades.
+    # Concurrent writers will hit SQLITE_BUSY errors. See docs/scale_boundaries.md.
     conn = sqlite3.connect(db_path)
     conn.execute(
         "INSERT INTO runs (id, timestamp, model_tag, config) VALUES (?, ?, ?, ?)",
@@ -135,6 +138,14 @@ def run_eval(
 
     if verbose:
         print(f"\nRun {run_id}  |  model={model_tag}  |  {len(cases)} cases\n")
+
+    # WHY batch commits instead of per-case conn.commit():
+    #   Each SQLite commit triggers an fsync to disk. Calling commit() after every
+    #   row is O(N) fsyncs — 5–10x slower than batching, on both SSDs and spinning
+    #   disks. We accumulate rows in memory and flush every COMMIT_BATCH_SIZE cases,
+    #   then flush the remainder at the end of the run.
+    COMMIT_BATCH_SIZE = 10
+    pending_rows = 0
 
     for i, case in enumerate(cases):
         case_id = case["id"]
@@ -146,11 +157,25 @@ def run_eval(
         #   A model that errors on one case should not abort the entire eval run.
         #   We capture the error, assign score=0, and continue — so you get a
         #   complete picture of model reliability (some cases failing is signal).
+        #
+        # WHY ThreadPoolExecutor timeout:
+        #   model_fn can block indefinitely if the underlying service hangs (e.g.,
+        #   Ollama down, RAG retrieval stalled). Without a timeout, a single hung
+        #   case stalls the entire eval with no escape. 30s is generous for any
+        #   LLM API call; adjust via the model_timeout parameter if needed.
         model_output = None
         model_error = None
         t0 = time.time()
         try:
-            model_output = model_fn(question)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(model_fn, question)
+                try:
+                    model_output = future.result(timeout=30)
+                except FutureTimeout:
+                    model_error = "timeout"
+                    model_output = ""
+                    if verbose:
+                        print(f"  [{i+1:02d}/{len(cases)}] TIMEOUT {case_id} (30s) — model={model_tag}")
         except Exception as e:
             model_error = str(e)
             model_output = ""
@@ -195,6 +220,13 @@ def run_eval(
             scores.get("input_tokens", 0), scores.get("output_tokens", 0),
             model_error,
         ))
+        pending_rows += 1
+        if pending_rows >= COMMIT_BATCH_SIZE:
+            conn.commit()
+            pending_rows = 0
+
+    # Flush any rows that didn't fill the last batch
+    if pending_rows > 0:
         conn.commit()
 
     conn.close()

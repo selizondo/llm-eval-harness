@@ -53,7 +53,12 @@ class RunSummary:
     regressed_cases: list[str] | None = None
 
 
-def compute_summary(db_path: str, run_id: str, compare_run_id: str | None = None) -> RunSummary:
+def compute_summary(
+    db_path: str,
+    run_id: str,
+    compare_run_id: str | None = None,
+    regression_threshold: float = REGRESSION_DELTA_THRESHOLD,
+) -> RunSummary:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
@@ -117,7 +122,7 @@ def compute_summary(db_path: str, run_id: str, compare_run_id: str | None = None
         for r in rows:
             curr_avg = (r["correctness"] + r["groundedness"] + r["conciseness"]) / 3.0
             prev_avg = prev.get(r["case_id"])
-            if prev_avg is not None and prev_avg - curr_avg >= REGRESSION_DELTA_THRESHOLD:
+            if prev_avg is not None and prev_avg - curr_avg >= regression_threshold:
                 regressed.append(r["case_id"])
 
     conn.close()

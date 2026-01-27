@@ -115,6 +115,17 @@ def main():
     run_p.add_argument("--model", choices=MODEL_CHOICES, default="anthropic_direct")
     run_p.add_argument("--tag", required=True, help="Human-readable label for this run")
     run_p.add_argument("--compare", metavar="RUN_ID", help="Run ID to compare against for regression detection")
+    run_p.add_argument(
+        "--regression-threshold",
+        type=float,
+        default=1.0,
+        metavar="DELTA",
+        help=(
+            "Flag a case as regressed if its average score dropped by at least this many points "
+            "vs the comparison run (default: 1.0). One full point on a 1–5 scale is a clearly "
+            "noticeable quality drop; lower values increase sensitivity but also alert noise."
+        ),
+    )
     run_p.add_argument("--limit", type=int, help="Only evaluate first N cases")
     run_p.add_argument("--db", default=DB_PATH)
     run_p.add_argument("--detail", action="store_true", help="Print per-case table after summary")
@@ -138,6 +149,7 @@ def main():
     sum_p.add_argument("run_id")
     sum_p.add_argument("--compare", metavar="RUN_ID")
     sum_p.add_argument("--db", default=DB_PATH)
+    sum_p.add_argument("--regression-threshold", type=float, default=1.0, metavar="DELTA")
 
     args = parser.parse_args()
 
@@ -148,7 +160,7 @@ def main():
         print_case_detail(args.db, args.run_id)
 
     elif args.command == "summary":
-        print_run_summary(args.db, args.run_id, args.compare)
+        print_run_summary(args.db, args.run_id, args.compare, regression_threshold=args.regression_threshold)
 
     elif args.command == "run":
         # Build model function
@@ -171,7 +183,7 @@ def main():
             limit=args.limit,
         )
 
-        print_run_summary(args.db, run_id, args.compare)
+        print_run_summary(args.db, run_id, args.compare, regression_threshold=args.regression_threshold)
         if args.detail:
             print_case_detail(args.db, run_id)
 

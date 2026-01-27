@@ -22,8 +22,13 @@ def _score_color(score: float) -> str:
     return "red"
 
 
-def print_run_summary(db_path: str, run_id: str, compare_run_id: str | None = None):
-    summary = compute_summary(db_path, run_id, compare_run_id)
+def print_run_summary(
+    db_path: str,
+    run_id: str,
+    compare_run_id: str | None = None,
+    regression_threshold: float = 1.0,
+):
+    summary = compute_summary(db_path, run_id, compare_run_id, regression_threshold=regression_threshold)
 
     title = f"Eval Run: [bold]{summary.run_id}[/bold]  |  model: [cyan]{summary.model_tag}[/cyan]"
     if summary.regression_vs:

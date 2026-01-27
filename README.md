@@ -93,6 +93,9 @@ python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk
 # Compare to a previous run — prints regression report
 python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk512" --compare <run_id>
 
+# Compare with a tighter regression threshold (flag if score drops >= 0.5)
+python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk512" --compare <run_id> --regression-threshold 0.5
+
 # List all historical runs
 python main.py list-runs
 
@@ -102,6 +105,8 @@ python main.py show-cases <run_id>
 # Quick smoke test (first 3 cases)
 python main.py run --cases evals/cases/rag_qa.jsonl --model anthropic_direct --tag "smoke" --limit 3
 ```
+
+**`--regression-threshold DELTA`** (default `1.0`): a case is flagged as regressed if its average score dropped by at least `DELTA` points compared to the baseline run. The default of 1.0 corresponds to one full point on the 1–5 scale — a clearly noticeable quality drop. Lower values (e.g., `0.5`) increase sensitivity but also increase alert noise from judge scoring variance (~±0.3 per run at temperature=0). Derivation: at temperature=0, judge variance is ~0.3 points; a threshold of 1.0 gives a 3σ margin above noise, minimizing false positives.
 
 ---
 

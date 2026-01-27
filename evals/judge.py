@@ -87,43 +87,59 @@ def judge(
         model_answer=model_answer,
     )
 
+    # WHY retry instead of immediate fallback:
+    #   Anthropic's API occasionally returns transient errors (rate limits, 5xx).
+    #   A single failure should not permanently mark a case as 0-scored — one retry
+    #   resolves most transient glitches. Two retries with exponential backoff
+    #   (0.5s → 2.0s) keeps total added latency under 3s while tolerating brief
+    #   service hiccups. On all retries exhausted, fall back to 0-scores rather
+    #   than raising — the eval run should complete, not crash.
+    BACKOFF_DELAYS = [0.5, 2.0]  # seconds between retry attempts
+    MAX_ATTEMPTS = 1 + len(BACKOFF_DELAYS)  # 3 total: 1 initial + 2 retries
+
     t0 = time.time()
-    try:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=256,
-            temperature=0,          # deterministic for reproducibility
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        latency_ms = int((time.time() - t0) * 1000)
-        raw = response.content[0].text.strip()
+    last_error: str = ""
 
-        # Strip markdown code fences if present
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
+    for attempt in range(MAX_ATTEMPTS):
+        if attempt > 0:
+            time.sleep(BACKOFF_DELAYS[attempt - 1])
+        try:
+            response = client.messages.create(
+                model=MODEL,
+                max_tokens=256,
+                temperature=0,          # deterministic for reproducibility
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            latency_ms = int((time.time() - t0) * 1000)
+            raw = response.content[0].text.strip()
 
-        scores = json.loads(raw)
-        return {
-            "correctness": int(scores["correctness"]),
-            "groundedness": int(scores["groundedness"]),
-            "conciseness": int(scores["conciseness"]),
-            "reasoning": scores.get("reasoning", ""),
-            "judge_latency_ms": latency_ms,
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-        }
-    except json.JSONDecodeError as e:
-        return {
-            "correctness": 0, "groundedness": 0, "conciseness": 0,
-            "reasoning": f"Judge parse error: {e} | raw={raw[:200]}",
-            "judge_latency_ms": int((time.time() - t0) * 1000),
-            "input_tokens": 0, "output_tokens": 0,
-        }
-    except Exception as e:
-        return {
-            "correctness": 0, "groundedness": 0, "conciseness": 0,
-            "reasoning": f"Judge error: {e}",
-            "judge_latency_ms": int((time.time() - t0) * 1000),
-            "input_tokens": 0, "output_tokens": 0,
-        }
+            # Strip markdown code fences if present
+            raw = re.sub(r"^```(?:json)?\s*", "", raw)
+            raw = re.sub(r"\s*```$", "", raw)
+
+            scores = json.loads(raw)
+            return {
+                "correctness": int(scores["correctness"]),
+                "groundedness": int(scores["groundedness"]),
+                "conciseness": int(scores["conciseness"]),
+                "reasoning": scores.get("reasoning", ""),
+                "judge_latency_ms": latency_ms,
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+            }
+        except json.JSONDecodeError as e:
+            last_error = f"Judge parse error: {e} | raw={raw[:200]}"
+            # Parse errors are deterministic — retrying the same call won't help.
+            break
+        except Exception as e:
+            last_error = f"Judge error: {e}"
+            # Transient API error — retry if attempts remain.
+
+    return {
+        "correctness": 0, "groundedness": 0, "conciseness": 0,
+        "reasoning": last_error,
+        "judge_latency_ms": int((time.time() - t0) * 1000),
+        "input_tokens": 0, "output_tokens": 0,
+        "error": "judge_failed",
+    }
