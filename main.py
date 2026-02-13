@@ -32,18 +32,19 @@ DB_PATH = "./evals.db"
 # Model wrappers — add your own here
 # ---------------------------------------------------------------------------
 
-def make_anthropic_direct(model: str = "claude-haiku-4-5"):
+def make_anthropic_direct(model: str = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5")):
     """Direct Anthropic call — no retrieval. Baseline for comparison."""
     import anthropic
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise EnvironmentError("ANTHROPIC_API_KEY not set. Set it before running the eval harness.")
     client = anthropic.Anthropic(api_key=api_key)
+    _max_tokens = int(os.getenv("EVAL_MAX_TOKENS", "512"))
 
     def fn(question: str) -> str:
         response = client.messages.create(
             model=model,
-            max_tokens=512,
+            max_tokens=_max_tokens,
             temperature=0,
             system=(
                 "You are an expert ML engineer. Answer the following question clearly "

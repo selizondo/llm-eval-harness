@@ -14,7 +14,8 @@ import time
 
 import anthropic
 
-MODEL = "claude-haiku-4-5"
+MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
+_JUDGE_MAX_TOKENS = int(os.getenv("JUDGE_MAX_TOKENS", "256"))
 
 SYSTEM_PROMPT = """You are an expert evaluator of AI/ML question-answering systems.
 Your job is to score a model's answer against a golden reference answer on three axes.
@@ -106,7 +107,7 @@ def judge(
         try:
             response = client.messages.create(
                 model=MODEL,
-                max_tokens=256,
+                max_tokens=_JUDGE_MAX_TOKENS,
                 temperature=0,          # deterministic for reproducibility
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
