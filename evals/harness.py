@@ -93,6 +93,8 @@ def run_eval(
     db_path: str = DB_PATH,
     verbose: bool = True,
     limit: int | None = None,
+    judge_backend: str = "anthropic",
+    judge_ollama_model: str | None = None,
 ) -> str:
     """
     Run the eval loop.
@@ -110,7 +112,6 @@ def run_eval(
         run_id (str) — use with metrics.compute_summary() to get aggregated stats.
     """
     from .judge import judge
-    import anthropic
 
     init_db(db_path)
 
@@ -122,10 +123,16 @@ def run_eval(
     if limit:
         cases = cases[:limit]
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise EnvironmentError("ANTHROPIC_API_KEY not set. Set it before running the eval harness.")
-    client = anthropic.Anthropic(api_key=api_key)
+    # Build Anthropic client only when using the anthropic backend.
+    # WHY conditional: with backend="ollama", no API key is needed and
+    # creating the client would fail in offline/CI environments.
+    client = None
+    if judge_backend == "anthropic":
+        import anthropic
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise EnvironmentError("ANTHROPIC_API_KEY not set. Use --judge-backend ollama to run without an API key.")
+        client = anthropic.Anthropic(api_key=api_key)
 
     # SQLite scale note: single-writer, ~10M rows before query performance degrades.
     # Concurrent writers will hit SQLITE_BUSY errors. See docs/scale_boundaries.md.
@@ -187,7 +194,12 @@ def run_eval(
         # produces 0s anyway (no output = wrong/empty answer). Skip the call,
         # assign 0s directly, and record the model error for diagnosis.
         if model_output:
-            scores = judge(question, golden, model_output, client=client)
+            scores = judge(
+                question, golden, model_output,
+                client=client,
+                backend=judge_backend,
+                ollama_model=judge_ollama_model,
+            )
         else:
             scores = {
                 "correctness": 0, "groundedness": 0, "conciseness": 0,

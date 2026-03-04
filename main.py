@@ -135,6 +135,22 @@ def main():
     run_p.add_argument("--rag-corpus", default="../rag-pipeline-from-scratch/corpus")
     run_p.add_argument("--rerank", action="store_true")
     run_p.add_argument("--top-k", type=int, default=5)
+    # Judge backend options
+    run_p.add_argument(
+        "--judge-backend",
+        choices=["anthropic", "ollama"],
+        default=os.getenv("JUDGE_BACKEND", "anthropic"),
+        help=(
+            "Judge backend to use for scoring (default: anthropic). "
+            "Use 'ollama' to run without ANTHROPIC_API_KEY — requires Ollama running locally."
+        ),
+    )
+    run_p.add_argument(
+        "--ollama-judge-model",
+        default=os.getenv("OLLAMA_JUDGE_MODEL", "llama3.2"),
+        metavar="MODEL",
+        help="Ollama model name to use as judge (default: llama3.2). Only used when --judge-backend=ollama.",
+    )
 
     # show-cases command
     show_p = subparsers.add_parser("show-cases", help="Show per-case results for a run")
@@ -172,7 +188,13 @@ def main():
         elif args.model == "agent":
             model_fn = make_agent()
 
-        config = {"model": args.model, "cases": args.cases, "limit": args.limit}
+        config = {
+            "model": args.model,
+            "cases": args.cases,
+            "limit": args.limit,
+            "judge_backend": args.judge_backend,
+            "ollama_judge_model": args.ollama_judge_model if args.judge_backend == "ollama" else None,
+        }
 
         run_id = run_eval(
             cases_path=args.cases,
@@ -182,6 +204,8 @@ def main():
             db_path=args.db,
             verbose=True,
             limit=args.limit,
+            judge_backend=args.judge_backend,
+            judge_ollama_model=args.ollama_judge_model if args.judge_backend == "ollama" else None,
         )
 
         print_run_summary(args.db, run_id, args.compare, regression_threshold=args.regression_threshold)
