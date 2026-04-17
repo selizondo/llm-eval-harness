@@ -238,6 +238,14 @@ The harness doesn't know what the model is — it receives a `(str) -> str` func
 
 ---
 
+## Architectural Standard
+
+An eval harness that runs in CI and blocks merge on hallucination regression is the difference between "we think quality improved" and "we know quality improved." The model-agnostic callable interface — the harness receives a `(str) -> str` function and doesn't know what's behind it — is the key design decision. That interface means every comparison (RAG pipeline vs. fine-tuned model, Haiku vs. Sonnet, prompt v1 vs. v2) uses the same measurement tool. Consistent measurement is what makes quality comparisons meaningful across models, versions, and teams.
+
+The dual-backend design (Anthropic for production evals, Ollama for offline runs with `--judge-backend ollama`) removes the API key as a gate on running evals locally. Any engineer can run the full eval suite without credentials, which means eval runs in CI without secrets management complexity.
+
+---
+
 ## Related Projects
 
 | Project | Connection |
