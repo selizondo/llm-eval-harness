@@ -58,8 +58,8 @@ The model under test is a plain Python callable `(question: str) -> str` — swa
 
 ```bash
 # 1. Set up env
-cp ../career/.env.example ../career/.env
-# edit ../career/.env — uncomment ANTHROPIC_API_KEY
+cp .env.example .env
+# edit .env — uncomment ANTHROPIC_API_KEY
 
 # 2. Activate shared venv
 source ~/.venvs/newline/bin/activate
