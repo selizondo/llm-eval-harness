@@ -56,6 +56,12 @@ The model under test is a plain Python callable `(question: str) -> str` — swa
 
 **Runs locally — LLM judge requires an Anthropic key (or Ollama, see below).**
 
+> **Sibling repos:** Some eval targets (`--model rag_pipeline`, `--model agent`) expect
+> [rag-pipeline-from-scratch](https://github.com/selizondo/rag-pipeline-from-scratch) and
+> [llm-agent-tool-use](https://github.com/selizondo/llm-agent-tool-use) to be cloned into
+> the same parent directory. Standalone usage with `--model anthropic_direct` or
+> `--model ollama` has no such dependency.
+
 ```bash
 # 1. Set up env
 cp .env.example .env
@@ -250,7 +256,7 @@ The dual-backend design (Anthropic for production evals, Ollama for offline runs
 
 | Project | Connection |
 |---|---|
-| [rag-pipeline-app](../rag-pipeline-app) | Primary system under evaluation — the harness runs against the RAG API |
-| [rag-pipeline-from-scratch](../rag-pipeline-from-scratch) | Baseline RAG pipeline; 72% Accuracy@4 is the number this harness established |
-| [llm-drift-monitor](../llm-drift-monitor) | Monitoring counterpart — harness catches regressions between releases; drift monitor catches degradation between releases in production |
-| [finetune-case-study](../finetune-case-study) | Uses the same judge pattern and scoring rubric to compare four approaches |
+| [rag-pipeline-app](https://github.com/selizondo/rag-pipeline-app) | Primary system under evaluation — the harness runs against the RAG API |
+| [rag-pipeline-from-scratch](https://github.com/selizondo/rag-pipeline-from-scratch) | Baseline RAG pipeline; 72% Accuracy@4 is the number this harness established |
+| [llm-drift-monitor](https://github.com/selizondo/llm-drift-monitor) | Monitoring counterpart — harness catches regressions between releases; drift monitor catches degradation between releases in production |
+| [finetune-case-study](https://github.com/selizondo/finetune-case-study) | Uses the same judge pattern and scoring rubric to compare four approaches |
