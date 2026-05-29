@@ -86,8 +86,9 @@ class TestJudgeAnthropicPath:
 
     def test_raises_without_client_in_anthropic_mode(self):
         from evals.judge import judge
-        with pytest.raises(Exception):
-            judge("Q", "A", "A", client=None, backend="anthropic")
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}, clear=False):
+            with pytest.raises(Exception):
+                judge("Q", "A", "A", client=None, backend="anthropic")
 
 
 # ---------------------------------------------------------------------------

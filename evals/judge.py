@@ -81,6 +81,19 @@ Return ONLY this JSON:
 }}"""
 
 
+def _parse_score(text: str) -> dict:
+    """Extract JSON score dict from raw LLM response. Returns fallback on failure."""
+    text = re.sub(r"^```(?:json)?\s*", "", text.strip())
+    text = re.sub(r"\s*```$", "", text)
+    match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+    return {"correctness": 0, "groundedness": 0, "conciseness": 0, "reasoning": "parse_failed"}
+
+
 def _call_ollama_judge(prompt: str, ollama_model: str) -> str:
     """
     HTTP call to local Ollama for judge scoring.

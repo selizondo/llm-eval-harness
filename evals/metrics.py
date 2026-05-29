@@ -36,6 +36,27 @@ HALLUCINATION_THRESHOLD = 3
 REGRESSION_DELTA_THRESHOLD = 1.0
 
 
+def accuracy_at_k(scores: list[dict], threshold: float = ACCURACY_THRESHOLD) -> float:
+    """Fraction of cases where mean(correctness, groundedness, conciseness) >= threshold."""
+    if not scores:
+        return 0.0
+    passing = sum(
+        1 for s in scores
+        if (s.get("correctness", 0) + s.get("groundedness", 0) + s.get("conciseness", 0)) / 3 >= threshold
+    )
+    return passing / len(scores)
+
+
+def average_score(scores: list[dict]) -> float:
+    """Mean of per-case average scores across all three axes."""
+    if not scores:
+        return 0.0
+    return sum(
+        (s.get("correctness", 0) + s.get("groundedness", 0) + s.get("conciseness", 0)) / 3
+        for s in scores
+    ) / len(scores)
+
+
 @dataclass
 class RunSummary:
     run_id: str
