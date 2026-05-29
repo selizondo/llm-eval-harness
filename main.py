@@ -22,8 +22,8 @@ import argparse
 import os
 import sys
 
+from evals.dashboard import print_case_detail, print_run_summary, print_runs_list
 from evals.harness import run_eval
-from evals.dashboard import print_run_summary, print_case_detail, print_runs_list
 
 DB_PATH = "./evals.db"
 
@@ -72,8 +72,8 @@ def make_rag_pipeline(
     """
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../rag-pipeline-from-scratch"))
     try:
-        from retrieve import retrieve
         from generate import generate
+        from retrieve import retrieve
     except ImportError as e:
         raise ImportError(f"RAG pipeline not found: {e}. Point --rag-path to rag-pipeline-from-scratch/")
 

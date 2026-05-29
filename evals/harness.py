@@ -29,10 +29,10 @@ import os
 import sqlite3
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from pathlib import Path
 from typing import Callable
-
 
 DB_PATH = "./evals.db"
 SCHEMA = """

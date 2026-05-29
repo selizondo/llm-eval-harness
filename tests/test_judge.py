@@ -10,12 +10,12 @@ Coverage:
 No real API calls — all LLM calls are mocked.
 """
 
+import os
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-import sys
-import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 

@@ -4,12 +4,11 @@ dashboard.py — Rich terminal display for eval results.
 
 import sqlite3
 
+from rich import box
 from rich.console import Console
 from rich.table import Table
-from rich import box
 
 from .metrics import compute_summary, list_runs
-
 
 console = Console()
 
