@@ -1,5 +1,7 @@
 # LLM Eval Harness
 
+![Tests](https://github.com/selizondo/llm-eval-harness/actions/workflows/test.yml/badge.svg)
+
 A reusable evaluation framework for LLM-powered systems. Define test cases with golden answers, grade model outputs with an LLM judge, and track scores across model versions to catch regressions before they ship.
 
 **Stack:** Python · Anthropic Claude Haiku (judge) · SQLite · Rich terminal
