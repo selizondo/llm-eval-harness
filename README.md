@@ -258,7 +258,9 @@ The dual-backend design (Anthropic for production evals, Ollama for offline runs
 
 | Project | Connection |
 |---|---|
-| [rag-pipeline-app](https://github.com/selizondo/rag-pipeline-app) | Primary system under evaluation — the harness runs against the RAG API |
-| [rag-pipeline-from-scratch](https://github.com/selizondo/rag-pipeline-from-scratch) | Baseline RAG pipeline; 72% Accuracy@4 is the number this harness established |
-| [llm-drift-monitor](https://github.com/selizondo/llm-drift-monitor) | Monitoring counterpart — harness catches regressions between releases; drift monitor catches degradation between releases in production |
-| [finetune-case-study](https://github.com/selizondo/finetune-case-study) | Uses the same judge pattern and scoring rubric to compare four approaches |
+| [rag-pipeline-app](https://github.com/selizondo/rag-pipeline-app) | Primary system under evaluation — the harness runs against the RAG API to measure quality improvements from hybrid BM25+vector search |
+| [rag-pipeline-from-scratch](https://github.com/selizondo/rag-pipeline-from-scratch) | Baseline RAG pipeline; 72% Accuracy@4 is the number this harness established — all downstream improvements reference this |
+| [rag-ragas-eval](https://github.com/selizondo/rag-ragas-eval) | Alternative evaluation framework using RAGAS metrics (faithfulness, context precision) on the same retrieval pipeline |
+| [llm-drift-monitor](https://github.com/selizondo/llm-drift-monitor) | Monitoring counterpart — harness catches regressions in dev; drift monitor catches degradation in production between releases |
+| [finetune-case-study](https://github.com/selizondo/finetune-case-study) | Uses the same LLM-as-judge pattern and scoring rubric to compare four fine-tuning approaches |
+| [llm-agent-tool-use](https://github.com/selizondo/llm-agent-tool-use) | Tool-use agent evaluated with this harness — `evals/cases/agent.jsonl` contains test cases for multi-step reasoning |
