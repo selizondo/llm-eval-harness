@@ -8,6 +8,20 @@ A reusable evaluation framework for LLM-powered systems. Define test cases with 
 
 ---
 
+## Key Concepts
+
+**LLM-as-judge:** Using an LLM to score other LLM outputs on semantic dimensions (correctness, groundedness, conciseness). Better than exact-match for open-ended questions where multiple correct answers exist. The tradeoff: judge scoring has variance (~±0.3 points at temperature=0); requires a strong judge (Claude, GPT-4o); can be fooled by confident-sounding hallucinations.
+
+**Regression detection:** Comparing scores across runs to catch degradation. If Accuracy@4 drops from 79% to 58% after a change, you've regressed. This harness flags case-by-case regressions and compares metrics side-by-side. The threshold is configurable — default 1.0 point on a 1–5 scale (one full grade letter) to avoid false positives from judge variance.
+
+**Golden answers:** Reference correct answers for test cases. "Correct" doesn't mean unique — for "What is attention?" both "Self-attention is a mechanism allowing tokens to attend to all other tokens" and "Attention weights the relevance of different tokens" are correct. The judge evaluates semantic equivalence, not string matching.
+
+**Model-agnostic interface:** The harness receives a `(str) -> str` function — it doesn't care if it's wrapping a local Ollama model, a RAG pipeline, an agent, or an API call. This means one harness can eval any model variation, making comparisons consistent across Haiku vs Sonnet, prompt v1 vs v2, retrieval-based vs fine-tuned.
+
+**Regression threshold tuning:** At temperature=0, judge variance is ~±0.3 per run. A threshold of 1.0 point gives 3σ confidence — you only flag cases where degradation is unambiguous. Lower thresholds (0.5) are more sensitive but trigger more alerts on noise. This project defaults to 1.0 and documents the tradeoff.
+
+---
+
 ## The Problem
 
 When you change anything in an LLM system — swap the model, adjust the prompt, tune chunk size in RAG, update the retrieval strategy — you need a repeatable way to measure whether quality went up or down. Without it, you're shipping on intuition.
