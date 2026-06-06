@@ -2,279 +2,49 @@
 
 ![Tests](https://github.com/selizondo/llm-eval-harness/actions/workflows/test.yml/badge.svg)
 
-A reusable evaluation framework for LLM-powered systems. Define test cases with golden answers, grade model outputs with an LLM judge, and track scores across model versions to catch regressions before they ship.
+A model regression looks like a customer complaint, not a stack trace. You swap a model, adjust a prompt, tune chunk size in a RAG pipeline, and three weeks later users are reporting wrong answers. No exception was raised. No alert fired. The system "worked." Until it didn't.
 
-**Stack:** Python · Anthropic Claude Haiku (judge) · SQLite · Rich terminal
+This harness gives every change a number. Run it before. Run it after. The difference tells you whether to ship.
 
----
+**Stack:** Python · Claude Haiku (judge) · SQLite · Rich terminal
 
-## Key Concepts
+## Results
 
-**LLM-as-judge:** Using an LLM to score other LLM outputs on semantic dimensions (correctness, groundedness, conciseness). Better than exact-match for open-ended questions where multiple correct answers exist. The tradeoff: judge scoring has variance (~±0.3 points at temperature=0); requires a strong judge (Claude, GPT-4o); can be fooled by confident-sounding hallucinations.
+Caught on the first real use: increasing RAG chunk size from 256 to 512 words dropped Accuracy@4 by 21 points and pushed hallucination rate from 4% to 17%.
 
-**Regression detection:** Comparing scores across runs to catch degradation. If Accuracy@4 drops from 79% to 58% after a change, you've regressed. This harness flags case-by-case regressions and compares metrics side-by-side. The threshold is configurable — default 1.0 point on a 1–5 scale (one full grade letter) to avoid false positives from judge variance.
+| Metric | chunk=256 (baseline) | chunk=512 (regressed) |
+|--------|---------------------|-----------------------|
+| Accuracy@4 | **79%** | 58% |
+| Hallucination rate | 4% | 17% |
+| Avg groundedness | 4.21 | 3.33 |
+| Judge cost per run | $0.038 | $0.041 |
 
-**Golden answers:** Reference correct answers for test cases. "Correct" doesn't mean unique — for "What is attention?" both "Self-attention is a mechanism allowing tokens to attend to all other tokens" and "Attention weights the relevance of different tokens" are correct. The judge evaluates semantic equivalence, not string matching.
+5 cases flagged as regressed. The harness prevented a chunk size change from shipping undetected.
 
-**Model-agnostic interface:** The harness receives a `(str) -> str` function — it doesn't care if it's wrapping a local Ollama model, a RAG pipeline, an agent, or an API call. This means one harness can eval any model variation, making comparisons consistent across Haiku vs Sonnet, prompt v1 vs v2, retrieval-based vs fine-tuned.
+## How It Works
 
-**Regression threshold tuning:** At temperature=0, judge variance is ~±0.3 per run. A threshold of 1.0 point gives 3σ confidence — you only flag cases where degradation is unambiguous. Lower thresholds (0.5) are more sensitive but trigger more alerts on noise. This project defaults to 1.0 and documents the tradeoff.
+### Three-axis scoring, not a single number
 
----
+Each answer is scored 1 to 5 on correctness, groundedness, and conciseness independently. A single composite score hides failure modes that need different fixes. High correctness with low groundedness means the model is hallucinating plausible content. High correctness with low conciseness means verbose padding. Three axes means three different intervention signals.
 
-## The Problem
+### Regression threshold derived from judge variance
 
-When you change anything in an LLM system — swap the model, adjust the prompt, tune chunk size in RAG, update the retrieval strategy — you need a repeatable way to measure whether quality went up or down. Without it, you're shipping on intuition.
+At temperature=0, judge scoring variance is approximately plus or minus 0.3 points per run. The default regression threshold of 1.0 point gives a 3 sigma margin above noise: a case is flagged only when the drop is unambiguous, not when it sits within normal judge variation. The threshold is configurable via `--regression-threshold` if tighter sensitivity is needed.
 
-This harness gives you a number. Run it before a change. Run it after. Compare.
+### Model-agnostic callable interface
 
----
+The harness receives a `(str) -> str` function and does not know what is behind it. RAG pipeline, fine-tuned model, direct API call, agent: one harness evaluates all of them. Adding a new model variant requires one wrapper function, not a harness change. Every comparison uses the same scoring tool, making results comparable across models, prompts, and retrieval strategies.
 
-## Architecture
-
-```
-Test cases (JSONL)
-       │
-       ▼
-┌─────────────────────────────────────────┐
-│  Eval Loop                              │
-│                                         │
-│  for each case:                         │
-│    model_answer = model_fn(question)    │
-│    scores = judge(question,             │
-│                   golden, answer)       │
-│    store → SQLite                       │
-└─────────────────────────────────────────┘
-       │
-       ▼
-Rich terminal dashboard + regression report
-```
-
-The model under test is a plain Python callable `(question: str) -> str` — swap in any model, pipeline, or agent without changing the harness.
+**Companion post:** "Don't Guess. Measure." (AI Systems in Production series, coming soon)
+**Related projects:** [rag-pipeline-from-scratch](https://github.com/selizondo/rag-pipeline-from-scratch) (baseline established with this harness: 72% Accuracy@4) · [llm-drift-monitor](https://github.com/selizondo/llm-drift-monitor) (production counterpart: catches degradation between releases)
 
 ---
 
-## Files
+## Go Deeper
 
-| File | Purpose |
-|------|---------|
-| `evals/harness.py` | Core eval loop — model-agnostic, stores results in SQLite |
-| `evals/judge.py` | LLM-as-judge — scores correctness, groundedness, conciseness (1–5) |
-| `evals/metrics.py` | Aggregates results — accuracy, hallucination rate, latency, cost, regressions |
-| `evals/dashboard.py` | Rich terminal display — summary table + per-case breakdown |
-| `evals/cases/rag_qa.jsonl` | 24 ML/AI test cases for the RAG pipeline |
-| `evals/cases/agent.jsonl` | 5 test cases for the tool-use agent |
-| `main.py` | CLI entrypoint |
-
----
-
-## Quick Start
-
-**Runs locally — LLM judge requires an Anthropic key (or Ollama, see below).**
-
-> **Sibling repos:** Some eval targets (`--model rag_pipeline`, `--model agent`) expect
-> [rag-pipeline-from-scratch](https://github.com/selizondo/rag-pipeline-from-scratch) and
-> [llm-agent-tool-use](https://github.com/selizondo/llm-agent-tool-use) to be cloned into
-> the same parent directory. Standalone usage with `--model anthropic_direct` or
-> `--model ollama` has no such dependency.
-
-```bash
-# 1. Set up env
-cp .env.example .env
-# edit .env — uncomment ANTHROPIC_API_KEY
-
-# 2. Activate shared venv
-source ~/.venvs/newline/bin/activate
-# or: python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-
-# 3. Quick smoke test (3 cases, uses Claude Haiku as judge)
-python main.py run --cases evals/cases/rag_qa.jsonl --model anthropic_direct --tag "smoke" --limit 3
-
-# 4. Full eval against RAG pipeline (Ollama must be running)
-python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk256"
-
-# 5. Compare two runs
-python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk512" --compare <run_id>
-```
-
-Results are persisted in `evals/` and SQLite, so you can reproduce the same comparison later and inspect the baseline run metadata with `python main.py list-runs`.
-
-**No Anthropic key?** Point the judge at Ollama by setting `JUDGE_MODEL=ollama` in `.env` and wiring `judge.py` to call Ollama instead of the Anthropic SDK.
-
----
-
-## Usage
-
-```bash
-# Run eval against Claude Haiku directly (baseline — no retrieval)
-python main.py run --cases evals/cases/rag_qa.jsonl --model anthropic_direct --tag "haiku_baseline"
-
-# Run eval against the RAG pipeline (requires Ollama running)
-python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk256"
-
-# Compare to a previous run — prints regression report
-python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk512" --compare <run_id>
-
-# Compare with a tighter regression threshold (flag if score drops >= 0.5)
-python main.py run --cases evals/cases/rag_qa.jsonl --model rag --tag "rag_chunk512" --compare <run_id> --regression-threshold 0.5
-
-# List all historical runs
-python main.py list-runs
-
-# Print per-case breakdown for a run
-python main.py show-cases <run_id>
-
-# Quick smoke test (first 3 cases)
-python main.py run --cases evals/cases/rag_qa.jsonl --model anthropic_direct --tag "smoke" --limit 3
-```
-
-**`--regression-threshold DELTA`** (default `1.0`): a case is flagged as regressed if its average score dropped by at least `DELTA` points compared to the baseline run. The default of 1.0 corresponds to one full point on the 1–5 scale — a clearly noticeable quality drop. Lower values (e.g., `0.5`) increase sensitivity but also increase alert noise from judge scoring variance (~±0.3 per run at temperature=0). Derivation: at temperature=0, judge variance is ~0.3 points; a threshold of 1.0 gives a 3σ margin above noise, minimizing false positives.
-
----
-
-## Scoring Rubric
-
-Each answer is scored 1–5 on three axes by Claude Haiku at temperature=0:
-
-| Axis | What it measures | Failure signal |
-|------|-----------------|----------------|
-| **Correctness** | Key facts from the golden answer present and accurate | Missed concepts, wrong definitions |
-| **Groundedness** | No hallucinations or unsupported claims | Invented citations, confident falsehoods |
-| **Conciseness** | Appropriately scoped — not padded, not too terse | Rambling answers, one-line non-answers |
-
-**Accuracy@4:** % of cases with average score ≥ 4.0 — the primary headline metric.  
-**Hallucination rate:** % of cases with groundedness < 3 — the safety signal.
-
----
-
-## Scenario: Catching a RAG Regression
-
-You're tuning the RAG pipeline and want to know whether increasing chunk size from 256 to 512 words helps or hurts answer quality.
-
-**Step 1 — Baseline with chunk size 256:**
-```bash
-python main.py run \
-  --cases evals/cases/rag_qa.jsonl \
-  --model rag \
-  --tag "rag_chunk256"
-```
-
-```
-Run a1b2c3d4  |  model: rag_chunk256  |  24 cases
-
-  [01/24] ✓ rag_001    C=5 G=5 P=4  avg=4.7  model=3102ms
-  [02/24] ✓ rag_002    C=5 G=4 P=4  avg=4.3  model=2891ms
-  [03/24] ~ rag_003    C=4 G=3 P=4  avg=3.7  model=3250ms
-  ...
-
-  Metric                       Value
- ────────────────────────────────────
-  Cases evaluated                 24
-  Accuracy@4 (avg ≥ 4.0)         79%
-  Hallucination rate               4%
-  Avg correctness               4.42
-  Avg groundedness              4.21
-  Avg conciseness               4.08
-  p50 latency               3,102 ms
-  p95 latency               4,890 ms
-  Judge cost (est.)           $0.038
-```
-
-**Step 2 — Rerun with chunk size 512, compare to baseline:**
-```bash
-python main.py run \
-  --cases evals/cases/rag_qa.jsonl \
-  --model rag \
-  --tag "rag_chunk512" \
-  --compare a1b2c3d4
-```
-
-```
-Run e5f6g7h8  |  model: rag_chunk512  |  compared to: a1b2c3d4
-
-  Metric                       Value
- ────────────────────────────────────
-  Cases evaluated                 24
-  Accuracy@4 (avg ≥ 4.0)         58%   ← dropped 21 points
-  Hallucination rate              17%   ← up from 4%
-  Avg correctness               3.88
-  Avg groundedness              3.33   ← notable drop
-  Avg conciseness               4.12
-  p50 latency               3,340 ms
-  p95 latency               5,100 ms
-  Judge cost (est.)           $0.041
-
-⚠  Regressions detected (5 cases):
-   • rag_005  (RAG vs fine-tuning)
-   • rag_006  (LoRA explanation)
-   • rag_018  (LSTM vs Transformer)
-   • rag_020  (transformer architecture)
-   • rag_021  (feature engineering)
-```
-
-The harness caught it: larger chunks dilute the embedding signal, retrieval becomes less precise, and groundedness drops — the model starts filling gaps with hallucinations instead of retrieved context. **Don't ship chunk size 512. Stay at 256.**
-
-This is the scenario the chunking experiment in the RAG pipeline confirmed empirically. The eval harness gives you the same signal at the answer quality level, not just the retrieval score level.
-
----
-
-## Test Case Format
-
-```json
-{
-  "id": "rag_001",
-  "input": "What is the attention mechanism in transformers?",
-  "golden_answer": "The attention mechanism computes a weighted sum of values...",
-  "tags": ["transformers", "architecture"],
-  "difficulty": "medium"
-}
-```
-
-24 cases in `evals/cases/rag_qa.jsonl` covering: transformers, optimization, regularization, evaluation metrics, NLP, and ML fundamentals. 5 cases in `evals/cases/agent.jsonl` covering factual lookup and multi-step reasoning.
-
----
-
-## Design Decisions
-
-**LLM-as-judge instead of exact match**
-Golden answers for open-ended ML questions can't be matched exactly — two correct answers may use different phrasing. LLM-as-judge captures semantic equivalence. The tradeoff: judge scores have variance (~±0.3 across runs at temperature=0). Mitigations: fixed temperature, structured JSON output, and running the judge twice on disputed cases.
-
-**When LLM-as-judge fails**
-The judge can be fooled by confident-sounding wrong answers (gives high groundedness to plausible hallucinations) and can penalize terse-but-correct answers. Always spot-check cases near the scoring threshold (avg 3.0–4.0). For high-stakes eval, supplement with human review on the tail.
-
-**SQLite over a hosted metrics store**
-Zero config, runs locally, trivially queryable. The schema supports trend analysis and regression detection without a server. For a team setting, swap to Postgres or plug into an observability platform (Langfuse, W&B).
-
-**Model-agnostic callable interface**
-The harness doesn't know what the model is — it receives a `(str) -> str` function. This makes it trivial to eval any model: direct API, RAG pipeline, agent, fine-tuned model, or a mock for testing. See `main.py` for the three built-in wrappers.
-
----
-
-## What I'd Do With More Time
-
-- **Human annotation pipeline** — flag low-confidence judge scores (avg 2.5–3.5) for human review; build a simple UI to collect labels
-- **A/B testing framework** — run two model variants on the same cases simultaneously, compute statistical significance of score differences
-- **CI integration** — GitHub Actions workflow that runs the harness on every PR and posts a score summary as a comment; block merge if hallucination rate exceeds threshold
-- **Broader case coverage** — add adversarial cases (ambiguous questions, out-of-scope queries, prompt injection attempts) to stress-test groundedness
-- **Cost tracking per model** — extend the schema to track model token usage, not just judge tokens, for true cost-per-query comparison across model variants
-
----
-
-## Architectural Standard
-
-An eval harness that runs in CI and blocks merge on hallucination regression is the difference between "we think quality improved" and "we know quality improved." The model-agnostic callable interface — the harness receives a `(str) -> str` function and doesn't know what's behind it — is the key design decision. That interface means every comparison (RAG pipeline vs. fine-tuned model, Haiku vs. Sonnet, prompt v1 vs. v2) uses the same measurement tool. Consistent measurement is what makes quality comparisons meaningful across models, versions, and teams.
-
-The dual-backend design (Anthropic for production evals, Ollama for offline runs with `--judge-backend ollama`) removes the API key as a gate on running evals locally. Any engineer can run the full eval suite without credentials, which means eval runs in CI without secrets management complexity.
-
----
-
-## Related Projects
-
-| Project | Connection |
-|---|---|
-| [rag-pipeline-app](https://github.com/selizondo/rag-pipeline-app) | Primary system under evaluation — the harness runs against the RAG API to measure quality improvements from hybrid BM25+vector search |
-| [rag-pipeline-from-scratch](https://github.com/selizondo/rag-pipeline-from-scratch) | Baseline RAG pipeline; 72% Accuracy@4 is the number this harness established — all downstream improvements reference this |
-| [rag-ragas-eval](https://github.com/selizondo/rag-ragas-eval) | Alternative evaluation framework using RAGAS metrics (faithfulness, context precision) on the same retrieval pipeline |
-| [llm-drift-monitor](https://github.com/selizondo/llm-drift-monitor) | Monitoring counterpart — harness catches regressions in dev; drift monitor catches degradation in production between releases |
-| [finetune-case-study](https://github.com/selizondo/finetune-case-study) | Uses the same LLM-as-judge pattern and scoring rubric to compare four fine-tuning approaches |
-| [llm-agent-tool-use](https://github.com/selizondo/llm-agent-tool-use) | Tool-use agent evaluated with this harness — `evals/cases/agent.jsonl` contains test cases for multi-step reasoning |
+| Audience | Doc |
+|----------|-----|
+| Business and product context | [Product and Cost](docs/product.md) |
+| Running the code | [Setup and Usage](docs/setup.md) |
+| Engineering decisions | [Design and Tradeoffs](docs/engineering.md) |
+| What breaks and why | [Failure Modes](docs/failures.md) |

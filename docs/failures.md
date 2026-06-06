@@ -8,7 +8,7 @@ Failure modes for the eval harness. "Handled" means a non-fatal path exists. "Do
 
 **What breaks:** The `model_fn` callable has no timeout. If a wrapper stalls (Ollama down, network issue, large generation), `run_eval` blocks indefinitely per case. For a 24-case eval, one hung model call stalls the entire run.
 
-**Status:** Documented gap. Noted in `docs/tradeoffs.md` under the `model_fn` callable interface section.
+**Status:** Documented gap. Noted in `docs/engineering.md` under the `model_fn` callable interface section.
 
 **Detection (planned):** Wrap `model_fn` call with `ThreadPoolExecutor` + `Future.result(timeout=30)`:
 ```python
