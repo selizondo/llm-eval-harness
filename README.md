@@ -8,6 +8,17 @@ This harness gives every change a number. Run it before. Run it after. The diffe
 
 **Stack:** Python · Claude Haiku (judge) · SQLite · Rich terminal
 
+## Related Projects
+
+1. [rag-pipeline-from-scratch](https://github.com/selizondo/rag-pipeline-from-scratch) — baseline established with this harness: 72% Accuracy@4
+2. [rag-pipeline-app](https://github.com/selizondo/rag-pipeline-app) — primary system under evaluation
+3. [llm-drift-monitor](https://github.com/selizondo/llm-drift-monitor) — production counterpart: catches degradation between releases
+4. [llm-agent-tool-use](https://github.com/selizondo/llm-agent-tool-use) — tool-use agent evaluated with this harness
+
+*Companion post: [Don't Guess. Measure.](docs/blog_post.md) — why measurement discipline beats intuition in AI systems*
+
+---
+
 ## Results
 
 Caught on the first real use: increasing RAG chunk size from 256 to 512 words dropped Accuracy@4 by 21 points and pushed hallucination rate from 4% to 17%.
@@ -35,10 +46,6 @@ At temperature=0, judge scoring variance is approximately plus or minus 0.3 poin
 
 The harness receives a `(str) -> str` function and does not know what is behind it. RAG pipeline, fine-tuned model, direct API call, agent: one harness evaluates all of them. Adding a new model variant requires one wrapper function, not a harness change. Every comparison uses the same scoring tool, making results comparable across models, prompts, and retrieval strategies.
 
-**Companion post:** "Don't Guess. Measure." (AI Systems in Production series, coming soon)
-**Related projects:** [rag-pipeline-from-scratch](https://github.com/selizondo/rag-pipeline-from-scratch) (baseline established with this harness: 72% Accuracy@4) · [llm-drift-monitor](https://github.com/selizondo/llm-drift-monitor) (production counterpart: catches degradation between releases)
-
----
 
 ## Go Deeper
 

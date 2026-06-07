@@ -1,5 +1,17 @@
 # Setup and Usage
 
+## Key Concepts
+
+**LLM-as-judge:** Using an LLM to score other LLM outputs on semantic dimensions (correctness, groundedness, conciseness). Better than exact-match for open-ended questions where multiple correct answers exist. Trade-off: judge scoring has variance (~±0.3 points at temperature=0); requires a strong judge (Claude, GPT-4o); can be fooled by confident-sounding hallucinations.
+
+**Regression detection:** Comparing scores across runs to catch degradation. If Accuracy@4 drops from 79% to 58% after a change, you've regressed. This harness flags case-by-case regressions and compares metrics side-by-side. The threshold is configurable — default 1.0 point on a 1–5 scale (one full grade letter) to avoid false positives from judge variance.
+
+**Golden answers:** Reference correct answers for test cases. "Correct" doesn't mean unique — for "What is attention?" both "Self-attention is a mechanism allowing tokens to attend to all other tokens" and "Attention weights the relevance of different tokens" are correct. The judge evaluates semantic equivalence, not string matching.
+
+**Model-agnostic interface:** The harness receives a `(str) -> str` function — it doesn't care if it's wrapping a local Ollama model, a RAG pipeline, an agent, or an API call. This means one harness can eval any model variation, making comparisons consistent across Haiku vs Sonnet, prompt v1 vs v2, retrieval-based vs fine-tuned.
+
+---
+
 ## Prerequisites
 
 - Python 3.10+
